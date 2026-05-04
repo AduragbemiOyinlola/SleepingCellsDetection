@@ -3,8 +3,8 @@ import msal
 import requests
 import base64
 
-CLIENT_ID = "your-client-id"
-TENANT_ID = "your-tenant-id"
+CLIENT_ID = os.getenv("CLIENT_ID")
+TENANT_ID = os.getenv("TENANT_ID")
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["Mail.Read"]
