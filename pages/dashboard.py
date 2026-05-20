@@ -217,6 +217,7 @@ def _render_step1():
                 with st.spinner("Connecting to mail server…"):
                     ok, msg = connect_imap(email_addr, password)
 
+
                 if ok:
                     st.session_state["email_connected"]   = True
                     st.session_state["email_credentials"] = {
@@ -366,6 +367,8 @@ def _render_step2():
                     _log("Email found but no CSV attachment.", "warn")
                 else:
                     sites, parse_msg = parse_sites_csv(result["csv_bytes"])
+                    print(sites, parse_msg)
+                    
                     st.session_state["fetched_email"] = result
                     st.session_state["parsed_sites"]  = sites
                     st.session_state["pipeline_step"] = max(
