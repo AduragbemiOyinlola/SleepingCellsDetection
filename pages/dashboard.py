@@ -686,7 +686,13 @@ def _render_step5():
             st.success("✅ Report already sent this session.")
         else:
             creds = st.session_state.get("email_credentials", {})
-            recipient = st.text_input("Send report to:", value=REPORT_RECIPIENT)
+            connected_email = creds.get("email_address", "") or REPORT_RECIPIENT
+            recipient = st.text_input(
+                "Send report to:",
+                value=connected_email,
+                help="Defaults to the email address you connected in Step 1. "
+                    "You can change this before sending.",
+            )
 
             if st.button("📧 Send Report Email", use_container_width=True):
                 if not creds.get("email_address") or creds.get("provider") == "demo":
