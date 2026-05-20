@@ -181,6 +181,7 @@ def _render_oauth_login():
             client_id=OAUTH_CLIENT_ID,
             redirect_uri=OAUTH_REDIRECT_URI,
             scope=scope,
+            response_type="code",
         )
         auth_url, state = oauth.create_authorization_url(provider_url)
         st.session_state["oauth_state"] = state
@@ -205,6 +206,7 @@ def _render_oauth_login():
                 client_secret=OAUTH_CLIENT_SECRET,
             )
             userinfo = oauth.get("https://www.googleapis.com/oauth2/v3/userinfo").json()
+            # print("OAuth login successful. User info:", userinfo)
             st.session_state["user"] = {
                 "username":     userinfo.get("email", ""),
                 "display_name": userinfo.get("name", ""),
