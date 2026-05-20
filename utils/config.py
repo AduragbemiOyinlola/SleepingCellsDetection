@@ -6,10 +6,13 @@ Fallback defaults are provided for local/demo usage.
 """
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 # "DEMO" | "OAUTH"
-AUTH_MODE = os.getenv("AUTH_MODE", "DEMO")
+AUTH_MODE = os.getenv("AUTH_MODE", "OAUTH")
 
 APP_NAME = "SleepGuard"
 
@@ -32,8 +35,8 @@ DEMO_USERS = [
 ]
 
 # OAuth (Google / Microsoft / Okta)
-OAUTH_CLIENT_ID     = os.getenv("OAUTH_CLIENT_ID",     "YOUR_CLIENT_ID_HERE")
-OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET", "YOUR_CLIENT_SECRET_HERE")
+OAUTH_CLIENT_ID     = os.getenv("OAUTH_CLIENT_ID",     "CLIENT_ID")
+OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET", "CLIENT_SECRET")
 OAUTH_REDIRECT_URI  = os.getenv("OAUTH_REDIRECT_URI",  "http://localhost:8501/")
 
 # ─── Email ────────────────────────────────────────────────────────────────────
