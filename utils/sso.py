@@ -79,10 +79,22 @@ def _google_exchange(code: str) -> dict:
     flow.fetch_token(code=code)
     creds = flow.credentials
     _TOKENS["gmail"] = {"google_creds": creds.to_json()}   # includes refresh_token
+
+    # Verify the mailbox-read scope was actually granted (not just requested).
+    ti = requests.get("https://oauth2.googleapis.com/tokeninfo",
+                      params={"access_token": creds.token}, timeout=15)
+    granted = ti.json().get("scope", "") if ti.status_code == 200 else ""
+    if "gmail.readonly" not in granted:
+        raise RuntimeError(
+            "Signed in, but Gmail did NOT grant mailbox-read access "
+            "(gmail.readonly). Your Google OAuth app must add the Gmail API "
+            "scopes on the consent screen and you must approve them. "
+            f"Granted scopes: {granted or '(none)'}")
+
     info = requests.get("https://www.googleapis.com/oauth2/v3/userinfo",
                         headers={"Authorization": f"Bearer {creds.token}"}, timeout=15).json()
     return {"token": creds.token, "email": info.get("email", ""),
-            "name": info.get("name", info.get("email", ""))}
+            "name": info.get("name", info.get("email", "")), "scopes": granted}
 
 
 def _google_refresh() -> str | None:
@@ -130,11 +142,20 @@ def _ms_exchange(ms_flow: dict, auth_response: dict) -> dict:
     if "access_token" not in result:
         raise RuntimeError(result.get("error_description", "MS token exchange failed"))
     _TOKENS["outlook"] = {"ms_cache": cache.serialize()}   # holds the refresh token
+
+    granted = result.get("scope", "")
+    if "Mail.Read" not in granted:
+        raise RuntimeError(
+            "Signed in, but Microsoft did NOT grant mailbox-read access "
+            "(Mail.Read). Your Azure app registration must add Microsoft Graph "
+            "DELEGATED permissions Mail.Read + Mail.Send (with admin consent if "
+            f"required). Granted scopes: {granted or '(none)'}")
+
     me = requests.get("https://graph.microsoft.com/v1.0/me",
                       headers={"Authorization": f"Bearer {result['access_token']}"}, timeout=15).json()
     return {"token": result["access_token"],
             "email": me.get("mail") or me.get("userPrincipalName", ""),
-            "name": me.get("displayName", "")}
+            "name": me.get("displayName", ""), "scopes": granted}
 
 
 def _ms_refresh() -> str | None:
@@ -170,6 +191,7 @@ email_client.set_token_refresher(_refresh_token)
 
 def _finalise_login(provider: str, info: dict):
     cfg.EMAIL_PROVIDER = provider
+    email_client.set_active_provider(provider)   # bind routing to this account
     st.session_state["user"] = {
         "username": info["email"], "display_name": info["name"] or info["email"],
         "email": info["email"], "role": "engineer",
