@@ -108,7 +108,9 @@ def render_login_page():
         if AUTH_MODE == "DEMO":
             _render_demo_login()
         elif AUTH_MODE == "OAUTH":
-            _render_oauth_login()
+            # Unified single sign-in: email -> auto-detect provider -> OAuth.
+            from utils.sso import render_unified_login
+            render_unified_login()
         else:
             st.error(f"Unknown AUTH_MODE='{AUTH_MODE}' in config.py")
 
