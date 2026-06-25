@@ -175,7 +175,7 @@ def _render_oauth_login():
         from authlib.integrations.requests_client import OAuth2Session
 
         provider_url = "https://accounts.google.com/o/oauth2/v2/auth"  # swap for MS/Okta
-        scope = "openid email profile"
+        scope = "openid email profile https://www.googleapis.com/auth/gmail.readonly"
 
         oauth = OAuth2Session(
             client_id=OAUTH_CLIENT_ID,
