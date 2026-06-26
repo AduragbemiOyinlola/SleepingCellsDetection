@@ -16,7 +16,7 @@ Token refresh
 -------------
 OAuth access tokens are short-lived; without refresh you get "HTTP 401" partway
 through the pipeline. We persist refresh material (MSAL token cache for
-Microsoft, the authorized-user JSON for Google) in _TOKENS and register a
+Microsoft, the authorized-user JSON for Google) in session_state and register a
 refresher with utils/email_client.py, which calls it on a 401 to get a fresh
 token and retry.
 """
@@ -44,8 +44,22 @@ os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 # state -> {"provider", "ms_flow"?}  (survives page reloads; in-process)
 _OAUTH_CACHE: dict[str, dict] = {}
-# provider -> refresh material  ({"google_creds": json} | {"ms_cache": str})
-_TOKENS: dict[str, dict] = {}
+
+
+# Refresh material (Google authorized-user JSON / MSAL token cache) is stored in
+# st.session_state — NOT a module global — so it survives Streamlit reruns AND
+# the module re-imports that happen when a source file is edited mid-session.
+def _store_refresh(provider: str, material: dict) -> None:
+    st.session_state.setdefault("_oauth_refresh", {})[provider] = material
+
+
+def _load_refresh(provider: str) -> dict | None:
+    return st.session_state.get("_oauth_refresh", {}).get(provider)
+
+
+def _current_provider() -> str | None:
+    creds = st.session_state.get("email_credentials") or {}
+    return creds.get("provider")
 
 
 # ─── Google ───────────────────────────────────────────────────────────────────
@@ -78,13 +92,13 @@ def _google_exchange(code: str) -> dict:
     flow.redirect_uri = EMAIL_REDIRECT_URI
     flow.fetch_token(code=code)
     creds = flow.credentials
-    _TOKENS["gmail"] = {"google_creds": creds.to_json()}   # includes refresh_token
+    _store_refresh("gmail", {"google_creds": creds.to_json()})   # includes refresh_token
 
     # Verify the mailbox-read scope was actually granted (not just requested).
     ti = requests.get("https://oauth2.googleapis.com/tokeninfo",
                       params={"access_token": creds.token}, timeout=15)
     granted = ti.json().get("scope", "") if ti.status_code == 200 else ""
-    if "gmail.readonly" not in granted:
+    if "gmail.readonly" not in granted.lower():
         raise RuntimeError(
             "Signed in, but Gmail did NOT grant mailbox-read access "
             "(gmail.readonly). Your Google OAuth app must add the Gmail API "
@@ -98,7 +112,7 @@ def _google_exchange(code: str) -> dict:
 
 
 def _google_refresh() -> str | None:
-    mat = _TOKENS.get("gmail")
+    mat = _load_refresh("gmail")
     if not mat:
         return None
     from google.oauth2.credentials import Credentials
@@ -107,7 +121,7 @@ def _google_refresh() -> str | None:
     if not creds.refresh_token:
         return None
     creds.refresh(Request())
-    _TOKENS["gmail"]["google_creds"] = creds.to_json()
+    _store_refresh("gmail", {"google_creds": creds.to_json()})
     return creds.token
 
 
@@ -141,7 +155,7 @@ def _ms_exchange(ms_flow: dict, auth_response: dict) -> dict:
     result = app.acquire_token_by_auth_code_flow(ms_flow, auth_response)
     if "access_token" not in result:
         raise RuntimeError(result.get("error_description", "MS token exchange failed"))
-    _TOKENS["outlook"] = {"ms_cache": cache.serialize()}   # holds the refresh token
+    _store_refresh("outlook", {"ms_cache": cache.serialize()})   # holds the refresh token
 
     granted = result.get("scope", "")
     if "Mail.Read" not in granted:
@@ -159,7 +173,7 @@ def _ms_exchange(ms_flow: dict, auth_response: dict) -> dict:
 
 
 def _ms_refresh() -> str | None:
-    mat = _TOKENS.get("outlook")
+    mat = _load_refresh("outlook")
     if not mat:
         return None
     app, cache = _ms_app(cache_blob=mat["ms_cache"])
@@ -169,7 +183,7 @@ def _ms_refresh() -> str | None:
     result = app.acquire_token_silent(MS_OAUTH_SCOPES, account=accounts[0])
     if not result or "access_token" not in result:
         return None
-    _TOKENS["outlook"]["ms_cache"] = cache.serialize()
+    _store_refresh("outlook", {"ms_cache": cache.serialize()})
     return result["access_token"]
 
 
@@ -185,6 +199,7 @@ def _refresh_token(provider: str) -> str | None:
 
 
 email_client.set_token_refresher(_refresh_token)
+email_client.set_provider_getter(_current_provider)
 
 
 # ─── session wiring ───────────────────────────────────────────────────────────
