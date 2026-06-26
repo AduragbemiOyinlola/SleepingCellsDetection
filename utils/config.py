@@ -61,7 +61,11 @@ GRAPH_ROOT       = "https://graph.microsoft.com/v1.0"
 # App-registration (public client) values used by scripts/get_outlook_token.py
 # to mint an access token via device-code sign-in.
 MS_CLIENT_ID     = os.getenv("MS_CLIENT_ID", "MS_CLIENT_ID")
-# "common" (any account), "organizations", "consumers", or your tenant GUID.
+# "common" (work + personal), "consumers" (personal @outlook.com/@hotmail only),
+# "organizations" (work only), or a tenant GUID (single org).
+# IMPORTANT: for a PERSONAL Microsoft account, use "consumers" or "common" —
+# a tenant GUID makes the token tenant-scoped and Exchange returns an empty-body
+# 401 on /me/messages even though /me works.
 MS_TENANT        = os.getenv("MS_TENANT", "common")
 # Scopes the Outlook token must carry: Mail.Read (read+attachments), Mail.Send.
 # Mail.ReadBasic is intentionally NOT used for fetch because it cannot read
@@ -82,11 +86,26 @@ GMAIL_OAUTH_SCOPES   = [
     "https://www.googleapis.com/auth/gmail.send",
 ]
 
-# Microsoft (Graph) resource scopes for the unified sign-in (msal adds
-# openid/profile/offline_access automatically).
-MS_OAUTH_SCOPES      = ["Mail.Read", "Mail.Send", "User.Read"]
+# Microsoft (Graph) scopes for the unified sign-in. List ONLY resource scopes:
+# MSAL adds openid/profile/offline_access automatically and RAISES if you pass
+# them explicitly ("You cannot use any scope value that is reserved").
+# offline_access (hence the refresh token) is therefore already included.
+MS_OAUTH_SCOPES      = ["User.Read", "Mail.Read", "Mail.Send"]
 # Optional confidential-client secret (leave blank to use a public client).
 MS_CLIENT_SECRET     = os.getenv("MS_CLIENT_SECRET", "")
+
+# Print raw HTTP status/headers/body for each mail API call when troubleshooting.
+EMAIL_DEBUG          = os.getenv("EMAIL_DEBUG", "0") == "1"
+
+
+def credentials_status() -> dict:
+    """Quick sanity check that real OAuth credentials are configured (not the
+    placeholder defaults). Useful to surface misconfiguration early."""
+    placeholders = {"CLIENT_ID", "CLIENT_SECRET", "MS_CLIENT_ID", "", None}
+    return {
+        "google_ok": GOOGLE_CLIENT_ID not in placeholders and GOOGLE_CLIENT_SECRET not in placeholders,
+        "microsoft_ok": MS_CLIENT_ID not in placeholders,
+    }
 
 # ─── NMS / Operator API ───────────────────────────────────────────────────────
 # Set NMS_MOCK=1 to run with synthetic data (no real NMS required)
