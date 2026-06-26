@@ -53,6 +53,17 @@ def set_active_provider(provider: Optional[str]) -> None:
     _active_provider = (provider or None)
 
 
+# Optional getter (registered by sso) that returns the provider from
+# st.session_state, which survives Streamlit reruns/reloads — unlike module
+# globals, which reset whenever a source file is edited and re-imported.
+_provider_getter: Optional[Callable[[], Optional[str]]] = None
+
+
+def set_provider_getter(fn: Callable[[], Optional[str]]) -> None:
+    global _provider_getter
+    _provider_getter = fn
+
+
 def _refresh(provider: str) -> Optional[str]:
     if _token_refresher is None:
         return None
@@ -65,6 +76,13 @@ def _refresh(provider: str) -> Optional[str]:
 # ─── routing ──────────────────────────────────────────────────────────────────
 
 def _provider() -> str:
+    if _provider_getter is not None:
+        try:
+            p = _provider_getter()
+            if p:
+                return p.lower()
+        except Exception:  # noqa: BLE001
+            pass
     p = _active_provider or getattr(cfg, "EMAIL_PROVIDER", "gmail") or "gmail"
     return p.lower()
 
@@ -100,13 +118,31 @@ def _http_error(resp) -> str:
             return f"HTTP {resp.status_code} — {detail}"
     except Exception:  # noqa: BLE001
         pass
-    # 2) WWW-Authenticate header (Graph often puts the reason here)
+    # 2) WWW-Authenticate header (Graph/Exchange often put the reason here, and
+    #    on mail endpoints a *bare* challenge with no error_description usually
+    #    means Exchange rejected the token — e.g. no mailbox on this account).
     www = resp.headers.get("WWW-Authenticate", "")
-    if "error_description" in www:
-        return f"HTTP {resp.status_code} — {www.split('error_description=')[-1].strip().strip(chr(34))[:200]}"
+    if www:
+        if "error_description" in www:
+            desc = www.split("error_description=")[-1].strip().strip('"').split('"')[0]
+            return f"HTTP {resp.status_code} — {desc}"
+        hint = ""
+        if resp.status_code == 401 and "outlook.office" in www.lower():
+            hint = (" — Exchange rejected the token. For a personal Microsoft "
+                    "account this usually means a tenant-specific OAuth authority; "
+                    "set MS_TENANT=consumers (or common), not a tenant GUID")
+        return f"HTTP {resp.status_code} — auth challenge: {www[:200]}{hint}"
     # 3) raw body snippet (reveals proxy/HTML interception)
     body = (resp.text or "").strip().replace("\n", " ")
-    return f"HTTP {resp.status_code}" + (f" — {body[:200]}" if body else " (empty response body)")
+    if body:
+        return f"HTTP {resp.status_code} — {body[:200]}"
+    extra = ""
+    if resp.status_code == 401 and _is_outlook():
+        extra = (" — Exchange Online rejected the token. For a personal "
+                 "@outlook.com account this is usually a tenant-specific OAuth "
+                 "authority: set MS_TENANT=consumers (or common) in .env, never a "
+                 "tenant GUID, then sign in again")
+    return f"HTTP {resp.status_code} (empty response body){extra}"
 
 
 def _request(method: str, url: str, token: str, provider: str, *,
@@ -118,6 +154,10 @@ def _request(method: str, url: str, token: str, provider: str, *,
         headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
         params=params, json=json_body, timeout=30,
     )
+    if getattr(cfg, "EMAIL_DEBUG", False):
+        print(f"[mail] {method} {url} params={params} -> {resp.status_code}")
+        print(f"[mail]   WWW-Authenticate: {resp.headers.get('WWW-Authenticate','(none)')}")
+        print(f"[mail]   resp body: {(resp.text or '')[:500]}")
     if resp.status_code == 401 and not _retried:
         fresh = _refresh(provider)
         if fresh and fresh != token:
@@ -141,10 +181,14 @@ def _graph_connect(token: str) -> Tuple[bool, str]:
 
 def _graph_fetch(token: str, keyword: str) -> Tuple[Optional[dict], str]:
     try:
+        # NOTE: we deliberately avoid $search (which requires the
+        # 'ConsistencyLevel: eventual' header and has KQL/encoding quirks).
+        # Listing newest-first and filtering the subject client-side is robust
+        # and needs only Mail.Read.
         resp = _request("GET", f"{GRAPH_ROOT}/me/messages", token, "outlook",
-                        params={"$search": f'"subject:{keyword}"',
-                                "$select": "id,subject,from,receivedDateTime,hasAttachments",
-                                "$top": EMAIL_MAX_SCAN})
+                        params={"$select": "id,subject,from,receivedDateTime,hasAttachments",
+                                "$top": EMAIL_MAX_SCAN,
+                                "$orderby": "receivedDateTime desc"})
         if resp.status_code != 200:
             return None, f"Error fetching email — {_http_error(resp)}"
 
@@ -153,12 +197,7 @@ def _graph_fetch(token: str, keyword: str) -> Tuple[Optional[dict], str]:
         if not items:
             return None, f"No emails found with subject containing '{keyword}'."
 
-        def _recv(it):
-            v = it.get("receivedDateTime")
-            return (datetime.fromisoformat(v.replace("Z", "+00:00"))
-                    if v else datetime.min.replace(tzinfo=timezone.utc))
-        items.sort(key=_recv, reverse=True)
-        msg = items[0]
+        msg = items[0]   # already newest-first from $orderby
         frm = (msg.get("from") or {}).get("emailAddress") or {}
         result = {"subject": msg.get("subject", ""),
                   "sender": f'{frm.get("name","")} <{frm.get("address","")}>'.strip(),
