@@ -86,9 +86,16 @@ def _verify_demo(username: str, password: str):
 # ─── Login UI ──────────────────────────────────────────────────────────────────
 
 def render_login_page():
-    """Full-page login form rendered when the user is not authenticated."""
+    """Full-page login. The OAUTH (unified) login is full-bleed and supplies its
+    own hero + card layout, so it must NOT be wrapped in a narrow centered column.
+    Other modes keep the centered card."""
 
-    # Centered column layout
+    if AUTH_MODE == "OAUTH":
+        from utils.sso import render_unified_login
+        render_unified_login()
+        return
+
+    # Centered column layout (demo / fallback modes)
     col_l, col_c, col_r = st.columns([1, 1.4, 1])
     with col_c:
         st.markdown("""
@@ -107,10 +114,6 @@ def render_login_page():
 
         if AUTH_MODE == "DEMO":
             _render_demo_login()
-        elif AUTH_MODE == "OAUTH":
-            # Unified single sign-in: email -> auto-detect provider -> OAuth.
-            from utils.sso import render_unified_login
-            render_unified_login()
         else:
             st.error(f"Unknown AUTH_MODE='{AUTH_MODE}' in config.py")
 
