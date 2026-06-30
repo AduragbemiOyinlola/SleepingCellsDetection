@@ -253,33 +253,59 @@ def _redirect(url: str):
 
 
 def render_unified_login():
+    from utils.styles import inject_login_styles
+    inject_login_styles()
+
     if _handle_callback():
         return
     if st.session_state.get("sso_redirect_url"):
         _redirect(st.session_state.pop("sso_redirect_url"))
         return
 
-    st.markdown("#### Sign in to NOC")
-    st.caption("Access the sleeping cell detection platform")
+    # hero (left)  +  sign-in card (right), vertically centered
+    try:
+        left, right = st.columns([1.15, 0.85], gap="large",
+                                 vertical_alignment="center")
+    except TypeError:                      # older Streamlit without the kwarg
+        left, right = st.columns([1.15, 0.85], gap="large")
 
-    email = st.text_input("Email address", placeholder="engineer@network.ng", key="sso_email")
-    if st.button("CONTINUE →", use_container_width=True):
-        if not email or "@" not in email:
-            st.error("Enter a valid e-mail address.")
-            return
-        with st.spinner("Detecting your mail provider…"):
-            provider, _ = detect_provider(email)
-        if provider == "unknown":
-            st.session_state["sso_unknown"] = True
-        else:
-            st.session_state["sso_redirect_url"] = _auth_url_for(provider)
-        st.rerun()
+    with left:
+        st.markdown(
+            '<div class="login-hero">'
+            '<div class="login-mark">Network Operations</div>'
+            '<h1 class="login-brand">📡 SleepGuard</h1>'
+            '<p class="login-tag">An automated computer vision powered '
+            'sleeping cell detector</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    if st.session_state.get("sso_unknown"):
-        choice = st.radio("We couldn't detect your provider. Choose it:",
-                          ["Google / Gmail", "Microsoft / Outlook"], horizontal=True)
-        if st.button("Proceed →", use_container_width=True):
-            provider = "gmail" if "Google" in choice else "outlook"
-            st.session_state.pop("sso_unknown", None)
-            st.session_state["sso_redirect_url"] = _auth_url_for(provider)
+    with right:
+        st.markdown(
+            '<span class="login-anchor"></span>'
+            '<div class="login-card-title">Welcome, log in to your account</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<div class="login-label">email</div>', unsafe_allow_html=True)
+        email = st.text_input("email", placeholder="you@example.com",
+                              key="sso_email", label_visibility="collapsed")
+        if st.button("CONTINUE →", use_container_width=True):
+            if not email or "@" not in email:
+                st.error("Enter a valid e-mail address.")
+                return
+            with st.spinner("Detecting your mail provider…"):
+                provider, _ = detect_provider(email)
+            if provider == "unknown":
+                st.session_state["sso_unknown"] = True
+            else:
+                st.session_state["sso_redirect_url"] = _auth_url_for(provider)
             st.rerun()
+
+        if st.session_state.get("sso_unknown"):
+            choice = st.radio("We couldn't detect your provider. Choose it:",
+                              ["Google / Gmail", "Microsoft / Outlook"], horizontal=True)
+            if st.button("Proceed →", use_container_width=True):
+                provider = "gmail" if "Google" in choice else "outlook"
+                st.session_state.pop("sso_unknown", None)
+                st.session_state["sso_redirect_url"] = _auth_url_for(provider)
+                st.rerun()
