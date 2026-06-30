@@ -242,3 +242,112 @@ input:focus { border-color: var(--accent) !important; outline: none !important; 
 
 def inject_global_styles():
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Login page — centered composition over the network background
+# ═════════════════════════════════════════════════════════════════════════════
+from pathlib import Path
+
+LOGIN_CSS_TEMPLATE = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Saira:wght@300;400;500;600;700&display=swap');
+
+/* hide Streamlit chrome on the login screen only */
+header[data-testid="stHeader"], #MainMenu, footer { display: none !important; }
+section[data-testid="stSidebar"] { display: none !important; }
+[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapseButton"], [data-testid="stToolbar"],
+button[kind="header"] { display: none !important; }
+
+/* full-bleed network background (user image) with a gentle scrim for legibility */
+[data-testid="stAppViewContainer"] > .main { background: transparent !important; }
+[data-testid="stAppViewContainer"] {
+  background:
+    radial-gradient(900px 520px at 50% 60%, rgba(4,8,16,0.55), transparent 70%),
+    linear-gradient(180deg, rgba(7,11,20,0.30) 0%, rgba(7,11,20,0.15) 45%, rgba(7,11,20,0.55) 100%),
+    url('data:image/jpeg;base64,__BG__') center/cover fixed no-repeat,
+    #070b14 !important;
+}
+.block-container {
+  max-width: 1200px !important;
+  padding-top: 12vh !important; padding-bottom: 6vh !important;
+  position: relative; z-index: 2;
+}
+
+/* hero (left, vertically centered) */
+.login-hero { text-align: left; margin-bottom: 0; }
+.login-mark {
+  font-size: .74rem; font-family: var(--mono); letter-spacing: .42em;
+  text-transform: uppercase; color: var(--accent);
+  display: inline-flex; align-items: center; gap: .55rem; margin-bottom: 1.1rem;
+}
+.login-mark::after {
+  content: ''; width: 34px; height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+.login-brand {
+  font-family: 'Saira', sans-serif; font-weight: 600;
+  font-size: clamp(3rem, 6.2vw, 5rem); line-height: 1.02; margin: 0;
+  color: #ffffff; letter-spacing: .005em;
+  text-shadow: 0 0 46px rgba(0,196,255,.45), 0 4px 34px rgba(0,0,0,.55);
+}
+.login-tag {
+  font-family: var(--sans); font-weight: 300; font-size: 1.12rem;
+  color: #d6e6f4; max-width: 32ch; margin: 1rem 0 0; line-height: 1.55;
+}
+
+/* sign-in card (centered) — style the column holding .login-anchor */
+[data-testid="stColumn"]:has(.login-anchor),
+[data-testid="column"]:has(.login-anchor) {
+  background: rgba(8,14,26,.55); backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(120,200,255,.18); border-radius: 18px;
+  padding: 2.2rem 2rem 2.4rem !important; position: relative; z-index: 3;
+  box-shadow: 0 30px 80px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.login-card-title {
+  font-family: 'Saira', sans-serif; font-weight: 600; font-size: 1.5rem;
+  color: #ffffff; margin: 0 0 1.4rem 0; line-height: 1.25; text-align: left;
+}
+.login-label {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .18em;
+  text-transform: uppercase; color: #9fb6cc; margin: 0 0 .4rem 0;
+}
+
+/* inputs + button inside the card */
+[data-testid="stColumn"]:has(.login-anchor) input {
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(150,200,240,.22) !important;
+  color: #fff !important; padding: .8rem .95rem !important; font-size: .96rem !important;
+  border-radius: 10px !important;
+}
+[data-testid="stColumn"]:has(.login-anchor) input::placeholder { color: #7e93a8 !important; }
+[data-testid="stColumn"]:has(.login-anchor) input:focus {
+  border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(0,212,255,.15) !important;
+}
+[data-testid="stColumn"]:has(.login-anchor) .stButton > button {
+  width: 100%; margin-top: .9rem; padding: .82rem !important;
+  border-radius: 10px !important; font-size: .82rem !important;
+  background: linear-gradient(135deg, #18e0ff, #0091d6) !important;
+  box-shadow: 0 10px 30px rgba(0,180,235,.35) !important;
+}
+
+/* responsive */
+@media (max-width: 720px) {
+  .block-container { padding-top: 4vh !important; max-width: 92% !important; }
+  .login-brand { font-size: clamp(2.4rem, 11vw, 3.2rem); }
+}
+</style>
+"""
+
+
+def _login_bg_b64() -> str:
+    try:
+        return (Path(__file__).parent / "_login_bg.b64").read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+
+
+def inject_login_styles():
+    st.markdown(LOGIN_CSS_TEMPLATE.replace("__BG__", _login_bg_b64()),
+                unsafe_allow_html=True)
