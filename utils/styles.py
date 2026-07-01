@@ -236,12 +236,190 @@ input:focus { border-color: var(--accent) !important; outline: none !important; 
 .stTabs [data-baseweb="tab-list"] { background: var(--surface) !important; border-bottom: 1px solid var(--border) !important; }
 .stTabs [data-baseweb="tab"] { font-family: var(--mono) !important; font-size: 0.78rem !important; color: var(--muted) !important; }
 .stTabs [aria-selected="true"] { color: var(--accent) !important; border-bottom: 2px solid var(--accent) !important; }
+
+/* ── Hide Streamlit's automatic multipage nav (the "app"/"dashboard" list) ── */
+[data-testid="stSidebarNav"] { display: none !important; }
+
+/* ── Custom sidebar ──────────────────────────────────────────────────────── */
+.sb-brand { padding: 0.4rem 0 0.2rem; }
+.sb-logo { font-family: var(--mono); font-size: 1.05rem; color: var(--accent); }
+.sb-tagline { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+.sb-nav {
+  display: flex; align-items: center; gap: 0.55rem;
+  margin: 0.9rem 0 0.4rem; padding: 0.55rem 0.8rem;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 9px; color: var(--text); font-weight: 600; font-size: 0.9rem;
+}
+.sb-nav-icon { font-size: 1rem; }
+.sb-user {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.8rem 1rem; margin: 0.8rem 0 1rem;
+}
+.sb-user-label { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.09em; }
+.sb-user-name { font-weight: 600; color: var(--text); margin-top: 0.2rem; }
+.sb-user-mail { font-size: 0.72rem; color: var(--muted); word-break: break-all; }
+.sb-user-role { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+.sb-user-role span { color: var(--accent); }
+.sb-section { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin: 0.3rem 0 0.6rem; }
+.sb-step {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.45rem 0.7rem; margin-bottom: 0.4rem; border-radius: 8px;
+  font-size: 0.82rem; color: var(--muted);
+  border: 1px solid transparent;
+}
+.sb-step .sb-step-n {
+  width: 22px; height: 22px; border-radius: 50%; flex: 0 0 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 0.72rem;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+}
+.sb-step.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.sb-step.active .sb-step-n { background: var(--accent); color: #00131c; border-color: var(--accent); }
+.sb-step.done { color: var(--text); }
+.sb-step.done .sb-step-n { background: var(--success); color: #00131c; border-color: var(--success); }
+.sb-divider { border-top: 1px solid var(--border); margin: 1rem 0; }
+
+/* account chip + icon sign-out (bottom of sidebar) */
+.sb-acct { display: flex; align-items: center; gap: 0.6rem; padding: 0.2rem 0; }
+.sb-avatar {
+  width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 700; font-size: 0.9rem;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.sb-acct-name { font-weight: 600; color: var(--text); font-size: 0.9rem; line-height: 1.1; }
+.sb-acct-role { font-size: 0.66rem; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+/* make the keyed sign-out button an icon-only control */
+.st-key-signout_btn button {
+  background: transparent !important; border: 1px solid var(--border) !important;
+  box-shadow: none !important; padding: 0.4rem !important; min-height: 0 !important;
+  font-size: 0 !important; color: transparent !important; line-height: 0 !important;
+}
+.st-key-signout_btn button p,
+.st-key-signout_btn button div,
+.st-key-signout_btn button span { display: none !important; }   /* hide the "logout" text */
+.st-key-signout_btn button::before {
+  content: ''; display: inline-block; width: 18px; height: 18px;
+  background-color: var(--muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M9%2021H5a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2h4%27/%3E%3Cpolyline%20points%3D%2716%2017%2021%2012%2016%207%27/%3E%3Cline%20x1%3D%2721%27%20y1%3D%2712%27%20x2%3D%279%27%20y2%3D%2712%27/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M9%2021H5a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2h4%27/%3E%3Cpolyline%20points%3D%2716%2017%2021%2012%2016%207%27/%3E%3Cline%20x1%3D%2721%27%20y1%3D%2712%27%20x2%3D%279%27%20y2%3D%2712%27/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.st-key-signout_btn button:hover { border-color: var(--accent) !important; transform: none !important; }
+.st-key-signout_btn button:hover::before { background-color: var(--accent); }
+
+/* sun/moon theme switch (keyed button; knob gradient injected per-theme) */
+.st-key-theme_btn button {
+  width: 58px !important; height: 28px !important; min-height: 0 !important;
+  border-radius: 999px !important; padding: 0 !important;
+  border: 1px solid var(--border) !important; box-shadow: none !important;
+  font-size: 0 !important; position: relative; overflow: hidden;
+}
+.st-key-theme_btn button:hover { transform: none !important; filter: none !important; }
+.st-key-theme_btn button p,
+.st-key-theme_btn button div,
+.st-key-theme_btn button span { display: none !important; }
+.st-key-theme_btn button::before {
+  content: '☀'; position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; line-height: 1; }
+.st-key-theme_btn button::after {
+  content: '🌙'; position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; line-height: 1; }
+.sb-theme-label { font-size: 0.88rem; color: var(--text); padding-top: 4px; }
+
+/* download / form-submit buttons share the primary button look (fixes
+   invisible text in light mode where they otherwise fall back to defaults) */
+[data-testid="stDownloadButton"] > button,
+[data-testid="stFormSubmitButton"] > button {
+  background: linear-gradient(135deg, var(--accent), #0099cc) !important;
+  color: #00131c !important; font-family: var(--mono) !important;
+  font-weight: 700 !important; text-transform: uppercase !important;
+  border: none !important; border-radius: 4px !important; letter-spacing: 0.05em !important;
+}
+
+/* pin the theme switch + account chip to the very bottom of the sidebar.
+   Streamlit wraps every widget in element-container > stVerticalBlock, so
+   flex-grow on a nested wrapper does NOT propagate. Instead we make the
+   sidebar's content column full-height and give the spacer's container
+   margin-top:auto, which pushes it and everything after it to the bottom. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+  min-height: calc(100vh - 2rem);
+}
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"],
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > [data-testid="stVerticalBlock"] {
+  min-height: calc(100vh - 2rem);
+  display: flex; flex-direction: column;
+}
+section[data-testid="stSidebar"] [data-testid="element-container"]:has(.sb-spacer) {
+  margin-top: auto !important;
+}
+.sb-spacer { height: 0; }
+</style>
+"""
+
+
+# Light-mode palette override (re-declares :root after the base CSS, so it wins).
+LIGHT_OVERRIDE = """
+<style>
+:root {
+  --bg:       #eef3f9;
+  --surface:  #ffffff;
+  --surface2: #f1f5fb;
+  --border:   #d6e0ec;
+  --accent:   #0091d6;
+  --accent2:  #e2680c;
+  --success:  #07a878;
+  --warning:  #b9820a;
+  --danger:   #e23d4d;
+  --text:     #0f1b2d;
+  --muted:    #5a6b80;
+}
+html, body, [class*="css"] { background-color: var(--bg) !important; color: var(--text) !important; }
+[data-testid="stAppViewContainer"] { background: var(--bg) !important; }
+[data-baseweb="select"] > div { background: var(--surface2) !important; }
+/* selected value + dropdown option text must be dark in light mode (was near-white) */
+[data-baseweb="select"], [data-baseweb="select"] * { color: var(--text) !important; }
+[data-baseweb="select"] svg { fill: var(--muted) !important; color: var(--muted) !important; }
+[data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"] { background: var(--surface) !important; }
+[data-baseweb="popover"] [role="option"], [role="listbox"] [role="option"],
+[role="listbox"] * { color: var(--text) !important; }
+[role="option"]:hover { background: var(--surface2) !important; }
+
+/* Modern Streamlit uses st-emotion-cache-* (not css-*), so force readable text
+   on the actual content elements. Headings/accent spans keep their own colours. */
+.stApp { color: var(--text); }
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] strong,
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span,
+[data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] *,
+.stCheckbox label, .stRadio label, .stSelectbox label, .stTextInput label,
+label {
+  color: var(--text) !important;
+}
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
+  color: var(--muted) !important;
+}
+/* Expander shell + chevron */
+[data-testid="stExpander"] {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important; border-radius: 10px !important;
+}
+[data-testid="stExpander"] summary svg { fill: var(--muted) !important; color: var(--muted) !important; }
+/* Progress track */
+[data-testid="stProgress"] > div > div { background: var(--surface2) !important; }
 </style>
 """
 
 
 def inject_global_styles():
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+    if st.session_state.get("theme", "dark") == "light":
+        st.markdown(LIGHT_OVERRIDE, unsafe_allow_html=True)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
