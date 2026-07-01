@@ -38,8 +38,15 @@ from utils.config import (
 
 # ─── Public interface ─────────────────────────────────────────────────────────
 
+def tech_has_cs(tech: str) -> bool:
+    """4G/5G are packet-only and carry NO circuit-switched traffic.
+    2G/3G (and anything unlabelled) are treated as having CS traffic."""
+    t = (tech or "").strip().lower().replace(" ", "")
+    return t not in ("4g", "lte", "5g", "nr", "5gnr", "4g/5g", "4glte")
+
+
 def fetch_kpi_data(
-    cell_ids: List[str],
+    sites,
     progress_callback=None,
 ) -> Tuple[Dict[str, pd.DataFrame], List[str]]:
     """
@@ -47,23 +54,34 @@ def fetch_kpi_data(
 
     Parameters
     ----------
-    cell_ids         : list of cell ID strings extracted from the CSV
+    sites            : list of site dicts ({"cell_id", "tech", ...}) or plain
+                       cell-id strings.
     progress_callback: optional callable(frac: float, label: str) for UI progress
 
     Returns
     -------
-    kpi_data  : dict {cell_id -> DataFrame with columns [timestamp, availability, cs_traffic, ps_traffic]}
+    kpi_data  : dict {cell_id -> DataFrame}. Columns are [timestamp,
+                availability, ps_traffic] and additionally cs_traffic only for
+                technologies that carry circuit-switched traffic (2G/3G).
+                df.attrs carries {"tech", "has_cs"}.
     log_lines : list of status strings
     """
     kpi_data  : Dict[str, pd.DataFrame] = {}
     log_lines : List[str] = []
 
-    for i, cid in enumerate(cell_ids):
+    norm = []
+    for s in sites:
+        if isinstance(s, dict):
+            norm.append((str(s.get("cell_id", "")).strip(), s.get("tech", "")))
+        else:
+            norm.append((str(s).strip(), ""))
+
+    for i, (cid, tech) in enumerate(norm):
         if progress_callback:
-            progress_callback((i + 1) / len(cell_ids), f"Fetching KPIs for {cid}…")
+            progress_callback((i + 1) / len(norm), f"Fetching KPIs for {cid}…")
 
         if NMS_MOCK:
-            df, msg = _fetch_mock(cid)
+            df, msg = _fetch_mock(cid, tech)
         else:
             df, msg = _fetch_real(cid)
 
@@ -79,58 +97,50 @@ def fetch_kpi_data(
 _SLEEPING_PROBABILITY = 0.35
 
 
-def _fetch_mock(cell_id: str) -> Tuple[pd.DataFrame, str]:
+def _fetch_mock(cell_id: str, tech: str = "") -> Tuple[pd.DataFrame, str]:
     """Generate realistic synthetic KPI data for demo purposes."""
     time.sleep(0.05)   # tiny delay to feel real
 
-    rng     = random.Random(cell_id)   # deterministic per cell_id
+    rng      = random.Random(cell_id)   # deterministic per cell_id
     is_sleep = rng.random() < _SLEEPING_PROBABILITY
+    has_cs   = tech_has_cs(tech)
 
     periods = OBS_DAYS * 24            # hourly samples
     now     = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
     timestamps = [now - timedelta(hours=periods - i) for i in range(periods)]
 
-    availability = []
-    cs_traffic   = []
-    ps_traffic   = []
+    availability, cs_traffic, ps_traffic = [], [], []
+    sleep_start = periods // 3        # fault starts ~33% into window
 
-    # Base traffic shape: sinusoidal daily pattern
-    for t in timestamps:
+    for idx, t in enumerate(timestamps):
         hour = t.hour
-        # Peak around 12:00, trough around 03:00
-        daily_factor = 0.4 + 0.6 * abs((hour - 12) / 12)  # 0.4–1.0
+        daily_factor = 0.4 + 0.6 * abs((hour - 12) / 12)   # 0.4–1.0
         noise = rng.gauss(0, 0.05)
-
         avail = max(0.0, min(100.0, 97 + rng.gauss(0, 1.5)))
 
-        if is_sleep:
-            # Sleeping: availability stays high, traffic collapses
-            sleep_start = periods // 3           # fault starts ~33% into window
-            idx = timestamps.index(t)
-            if idx >= sleep_start:
-                cs  = max(0.0, rng.gauss(0.5, 0.4))          # near-zero
-                ps  = max(0.0, rng.gauss(1.2, 0.8))
-            else:
-                cs  = max(0.0, rng.gauss(60, 8) * daily_factor + noise * 10)
-                ps  = max(0.0, rng.gauss(800, 80) * daily_factor + noise * 100)
+        if is_sleep and idx >= sleep_start:
+            cs = max(0.0, rng.gauss(0.5, 0.4))             # near-zero
+            ps = max(0.0, rng.gauss(1.2, 0.8))
         else:
-            cs  = max(0.0, rng.gauss(60, 8)  * daily_factor + noise * 10)
-            ps  = max(0.0, rng.gauss(800, 80) * daily_factor + noise * 100)
+            cs = max(0.0, rng.gauss(60, 8)  * daily_factor + noise * 10)
+            ps = max(0.0, rng.gauss(800, 80) * daily_factor + noise * 100)
 
         availability.append(round(avail, 2))
         cs_traffic.append(round(cs, 2))
         ps_traffic.append(round(ps, 2))
 
-    df = pd.DataFrame({
-        "timestamp":    timestamps,
-        "availability": availability,
-        "cs_traffic":   cs_traffic,
-        "ps_traffic":   ps_traffic,
-        "_is_sleeping": is_sleep,   # hidden ground truth (only in mock)
-    })
+    cols = {"timestamp": timestamps, "availability": availability}
+    if has_cs:
+        cols["cs_traffic"] = cs_traffic
+    cols["ps_traffic"] = ps_traffic
+    df = pd.DataFrame(cols)
+    df.attrs["tech"]        = tech
+    df.attrs["has_cs"]      = has_cs
+    df.attrs["_is_sleeping"] = is_sleep   # hidden ground truth (mock only)
 
     status = "MOCK-SLEEPING" if is_sleep else "MOCK-HEALTHY"
-    return df, f"[{status}] {cell_id}: {periods} hourly records fetched."
+    kpis = "avail+cs+ps" if has_cs else "avail+ps (no CS — 4G/5G)"
+    return df, f"[{status}] {cell_id} ({tech or 'n/a'}): {periods} records, {kpis}."
 
 
 # ─── Real NMS integration stub ────────────────────────────────────────────────
@@ -213,7 +223,19 @@ def parse_sites_csv(csv_bytes: bytes) -> Tuple[List[Dict], str]:
             return [], "CSV must contain a 'cell_id' column (or similar)."
 
         df["cell_id"] = df["cell_id"].astype(str).str.strip()
+
+        # This file is the list of SUSPECTED sites only — it must not carry any
+        # verdict/probability columns. If the uploaded file happens to be a prior
+        # report, drop those so the pipeline computes its own verdict downstream.
+        drop = [c for c in df.columns if any(k in c for k in
+                ("verdict", "prob", "label", "prediction", "score"))]
+        df = df.drop(columns=drop, errors="ignore")
+
+        if "tech" not in df.columns:
+            df["tech"] = ""
+        df["tech"] = df["tech"].astype(str).str.strip()
+
         records = df.to_dict("records")
-        return records, f"Parsed {len(records)} site(s) from CSV."
+        return records, f"Parsed {len(records)} suspected site(s) from CSV."
     except Exception as e:
         return [], f"Failed to parse CSV: {e}"
