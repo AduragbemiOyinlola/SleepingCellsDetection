@@ -82,78 +82,76 @@ def _badge(text: str, kind: str):
 
 def _render_sidebar():
     user = get_user()
-    st.sidebar.markdown(f"""
-    <div style="padding:1rem 0 0.5rem;">
-      <div style="font-family:var(--mono);font-size:1rem;color:var(--accent);">
-        📡 SleepGuard
-      </div>
-      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.1rem;">
-        Network Operations Platform
-      </div>
-    </div>
-    <hr style="border-color:var(--border);margin:0.5rem 0;">
-    """, unsafe_allow_html=True)
-
-    st.sidebar.markdown(f"""
-    <div style="background:var(--surface2);border:1px solid var(--border);
-                border-radius:6px;padding:0.8rem 1rem;margin-bottom:1rem;">
-      <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;
-                  letter-spacing:0.08em;">Logged in as</div>
-      <div style="font-weight:600;color:var(--text);margin-top:0.2rem;">
-        {user.get('display_name','?')}
-      </div>
-      <div style="font-size:0.72rem;color:var(--muted);">{user.get('email','')}</div>
-      <div style="font-size:0.7rem;color:var(--muted);margin-top:0.1rem;">
-        Role: <span style="color:var(--accent);">{user.get('role','engineer')}</span>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-
     step = st.session_state.get("pipeline_step", 0)
-    st.sidebar.markdown("**Pipeline Steps**")
-    steps = [
-        (1, "Email Setup"),
-        (2, "Fetch Email"),
-        (3, "KPI Retrieval"),
-        (4, "Plots & Classify"),
-        (5, "Report"),
-    ]
+
+    st.sidebar.markdown(f"""
+    <div class="sb-brand">
+      <div class="sb-logo">📡 SleepGuard</div>
+      <div class="sb-tagline">Network Operations Platform</div>
+    </div>
+    <div class="sb-nav"><span class="sb-nav-icon">🛰️</span> Dashboard</div>
+    """, unsafe_allow_html=True)
+
+    # Pipeline steps — rendered as ONE sidebar block (no leaking into main)
+    steps = [(1, "Email Setup"), (2, "Fetch Email"), (3, "KPI Retrieval"),
+             (4, "Plots & Classify"), (5, "Report")]
+    rows = ['<div class="sb-section">Pipeline</div>']
+    last = steps[-1][0]
     for n, label in steps:
-        _step_pill(n, label, step)
+        done  = step > n or (n == last and step >= last)
+        state = "done" if done else ("active" if step == n else "todo")
+        icon  = "✓" if done else str(n)
+        rows.append(
+            f'<div class="sb-step {state}"><span class="sb-step-n">{icon}</span>{label}</div>')
+    st.sidebar.markdown("".join(rows), unsafe_allow_html=True)
 
-    st.sidebar.markdown('<hr style="border-color:var(--border);">', unsafe_allow_html=True)
+    # push the account/sign-out group to the very bottom of the sidebar
+    st.sidebar.markdown('<div class="sb-spacer"></div>', unsafe_allow_html=True)
 
-    # Mode indicators
-    st.sidebar.markdown("**Mode flags**")
-    for flag, label, on_col, off_col in [
-        (NMS_MOCK,   "NMS",   "#ffd166", "#00e5a0"),
-        (MODEL_MOCK, "Model", "#ffd166", "#00e5a0"),
-    ]:
-        mode  = "MOCK" if flag else "LIVE"
-        color = on_col if flag else off_col
-        st.sidebar.markdown(
-            f'<span style="font-family:var(--mono);font-size:0.72rem;">'
-            f'{label}: <span style="color:{color};">{mode}</span></span>',
-            unsafe_allow_html=True,
-        )
+    st.sidebar.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
 
-    st.sidebar.markdown('<hr style="border-color:var(--border);">', unsafe_allow_html=True)
+    # Theme switch — sun/moon pill (visible in both modes)
+    cur = st.session_state.get("theme", "dark")
+    knob = "calc(100% - 17px)" if cur == "dark" else "17px"
+    track = ("linear-gradient(90deg,#f6b73c 0%,#2b3a5e 100%)" if cur == "dark"
+             else "linear-gradient(90deg,#f6b73c 0%,#c9d6e8 100%)")
+    st.sidebar.markdown(
+        f"<style>.st-key-theme_btn button{{"
+        f"background:radial-gradient(circle 12px at {knob} 50%,#fff 92%,transparent 93%),"
+        f"{track} !important;}}</style>", unsafe_allow_html=True)
+    tcol1, tcol2 = st.sidebar.columns([1, 2])
+    with tcol1:
+        if st.button("theme", key="theme_btn", help="Toggle light / dark"):
+            st.session_state["theme"] = "light" if cur == "dark" else "dark"
+            st.rerun()
+    with tcol2:
+        st.markdown(
+            f'<div class="sb-theme-label">{"Dark" if cur=="dark" else "Light"} mode</div>',
+            unsafe_allow_html=True)
 
-    if st.sidebar.button("🚪 Sign Out", use_container_width=True):
-        logout()
+    st.sidebar.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
 
-    if st.sidebar.button("🔄 Reset Pipeline", use_container_width=True):
-        keys_to_clear = [
-            "email_connected","email_credentials","fetched_email","parsed_sites",
-            "kpi_data","plots","classifications","report_csv","report_sent",
-            "pipeline_log","pipeline_step","run_ts",
-        ]
-        for k in keys_to_clear:
-            st.session_state[k] = None if k not in (
-                "email_connected","report_sent") else False
-        st.session_state["pipeline_log"] = []
-        st.session_state["pipeline_step"] = 0
-        st.rerun()
+    # Compact account chip + icon sign-out (bottom)
+    name    = user.get("display_name", "User")
+    role    = (user.get("role", "engineer") or "engineer").upper()
+    initial = (name.strip()[:1] or "U").upper()
+    try:
+        chip_col, out_col = st.sidebar.columns([4, 1], vertical_alignment="center")
+    except TypeError:
+        chip_col, out_col = st.sidebar.columns([4, 1])
+    with chip_col:
+        st.markdown(f"""
+        <div class="sb-acct">
+          <div class="sb-avatar">{initial}</div>
+          <div>
+            <div class="sb-acct-name">{name}</div>
+            <div class="sb-acct-role">{role}</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with out_col:
+        if st.button("logout", key="signout_btn", help="Sign out"):
+            logout()
 
 
 # ─── Step 1 – Email setup ─────────────────────────────────────────────────────
@@ -266,15 +264,15 @@ def _render_step1():
 def _activate_demo_email():
     """Inject a synthetic email + CSV into session state for demo purposes."""
     demo_csv = (
-        "cell_id,site_name,region,vendor\n"
-        "CL001,Lagos_Island_1,SW,Ericsson\n"
-        "CL002,Ikeja_North,NW,Huawei\n"
-        "CL003,Victoria_Island_2,SE,Nokia\n"
-        "CL004,Lekki_Phase1,SE,Ericsson\n"
-        "CL005,Surulere_Central,SW,Huawei\n"
-        "CL006,Apapa_Port,SW,Nokia\n"
-        "CL007,Ikoyi_Heights,SE,Ericsson\n"
-        "CL008,Yaba_Tech,NW,Huawei\n"
+        "cell_id,site_name,region,tech,vendor\n"
+        "CL001,Lagos_Island_1,SW,2G,Ericsson\n"
+        "CL002,Ikeja_North,NW,4G,Huawei\n"
+        "CL003,Victoria_Island_2,SE,3G,Nokia\n"
+        "CL004,Lekki_Phase1,SE,5G,Ericsson\n"
+        "CL005,Surulere_Central,SW,4G,Huawei\n"
+        "CL006,Apapa_Port,SW,2G,Nokia\n"
+        "CL007,Ikoyi_Heights,SE,3G,Ericsson\n"
+        "CL008,Yaba_Tech,NW,4G,Huawei\n"
     ).encode()
 
     st.session_state["email_connected"]   = True
@@ -432,11 +430,22 @@ def _render_step3():
         cell_ids = list(kpi_data.keys())
         sel = st.selectbox("Preview cell:", cell_ids)
         if sel:
-            df = kpi_data[sel]
-            st.line_chart(
-                df.set_index("timestamp")[["availability", "cs_traffic", "ps_traffic"]],
-                use_container_width=True,
-                height=220,
+            df = kpi_data[sel].copy()
+            tech = df.attrs.get("tech", "")
+            has_cs = df.attrs.get("has_cs", "cs_traffic" in df.columns)
+            # NMS returns tabular KPI records — present as data, not a chart.
+            df = df.rename(columns={"timestamp": "date"})
+            cols = ["date", "availability"] + (["cs_traffic"] if has_cs else []) + ["ps_traffic"]
+            view = df[cols]
+            note = (f"Technology **{tech or 'n/a'}** — "
+                    + ("includes CS + PS traffic." if has_cs
+                       else "packet-only (4G/5G): **no CS traffic**, PS only."))
+            st.caption(note)
+            st.dataframe(view, use_container_width=True, height=300)
+            st.download_button(
+                f"⬇️ Download {sel} KPI CSV",
+                data=view.to_csv(index=False).encode(),
+                file_name=f"{sel}_kpi.csv", mime="text/csv",
             )
         st.button("↩ Re-fetch KPIs", on_click=lambda: st.session_state.update(kpi_data=None))
         return
@@ -460,8 +469,7 @@ def _render_step3():
             progress_bar.progress(frac)
             status_text.text(label)
 
-        cell_ids = [s["cell_id"] for s in sites]
-        kpi, logs = fetch_kpi_data(cell_ids, progress_callback=_cb)
+        kpi, logs = fetch_kpi_data(sites, progress_callback=_cb)
 
         for l in logs:
             _log(l)
@@ -533,7 +541,7 @@ def _render_step4():
 
                 def _ccb(f, l): pb2.progress(f); s2.text(l)
 
-                new_cls, cls_logs = classify_plots(new_plots, _ccb)
+                new_cls, cls_logs = classify_plots(new_plots, kpi_data, _ccb)
                 for l in cls_logs: _log(l)
                 pb2.progress(1.0); s2.text("Classification done.")
 
@@ -566,37 +574,41 @@ def _render_step4():
 
         if sel_cell:
             res = classifications[sel_cell]
+            has_cs = res.get("has_cs", "cs" in plots[sel_cell])
             verdict = "SLEEPING" if res["final"] == 1 else "HEALTHY"
             badge_kind = "sleeping" if res["final"] == 1 else "healthy"
 
-            col_badge, col_cs, col_ps = st.columns([1, 2, 2])
-            with col_badge:
+            prob_html = (
+                f'PS prob: <span style="color:var(--text);">{res["ps_prob"]:.3f}</span>'
+            )
+            if has_cs:
+                prob_html = (
+                    f'CS prob: <span style="color:var(--text);">{res.get("cs_prob",0):.3f}</span><br>'
+                    + prob_html
+                )
+
+            cols = st.columns([1, 2, 2]) if has_cs else st.columns([1, 3])
+            with cols[0]:
                 st.markdown("**Verdict:**")
                 _badge(verdict, badge_kind)
-                st.markdown(f"""
-                <div style="margin-top:0.8rem;font-size:0.78rem;color:var(--muted);">
-                CS prob: <span style="color:var(--text);">{res['cs_prob']:.3f}</span><br>
-                PS prob: <span style="color:var(--text);">{res['ps_prob']:.3f}</span>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="margin-top:0.8rem;font-size:0.78rem;color:var(--muted);">'
+                    f'{prob_html}</div>', unsafe_allow_html=True)
+                if not has_cs:
+                    st.caption("4G/5G — packet-only, single plot.")
 
-            with col_cs:
-                st.markdown("**Availability vs CS Traffic**")
-                st.image(
-                    io.BytesIO(plots[sel_cell]["cs"]),
-                    use_container_width=True,
-                )
-                label_cs = "Sleeping ⚠" if res["cs_label"] else "Healthy ✓"
-                _badge(f"CS: {label_cs}", "sleeping" if res["cs_label"] else "healthy")
-
-            with col_ps:
+            ps_col = cols[2] if has_cs else cols[1]
+            if has_cs:
+                with cols[1]:
+                    st.markdown("**Availability vs CS Traffic**")
+                    st.image(io.BytesIO(plots[sel_cell]["cs"]), use_container_width=True)
+                    lbl = "Sleeping ⚠" if res.get("cs_label") else "Healthy ✓"
+                    _badge(f"CS: {lbl}", "sleeping" if res.get("cs_label") else "healthy")
+            with ps_col:
                 st.markdown("**Availability vs PS Traffic**")
-                st.image(
-                    io.BytesIO(plots[sel_cell]["ps"]),
-                    use_container_width=True,
-                )
-                label_ps = "Sleeping ⚠" if res["ps_label"] else "Healthy ✓"
-                _badge(f"PS: {label_ps}", "sleeping" if res["ps_label"] else "healthy")
+                st.image(io.BytesIO(plots[sel_cell]["ps"]), use_container_width=True)
+                lbl = "Sleeping ⚠" if res["ps_label"] else "Healthy ✓"
+                _badge(f"PS: {lbl}", "sleeping" if res["ps_label"] else "healthy")
 
         # Full results table
         st.markdown("---")
@@ -604,12 +616,12 @@ def _render_step4():
         table_rows = []
         for cid, r in classifications.items():
             table_rows.append({
-                "Cell ID":    cid,
-                "CS Prob":    f"{r['cs_prob']:.3f}",
-                "PS Prob":    f"{r['ps_prob']:.3f}",
-                "CS Label":   "Sleeping" if r["cs_label"] else "Healthy",
-                "PS Label":   "Sleeping" if r["ps_label"] else "Healthy",
-                "Final":      "🔴 SLEEPING" if r["final"] else "🟢 Healthy",
+                "Cell ID":  cid,
+                "CS Prob":  f"{r['cs_prob']:.3f}" if r.get("has_cs") else "—",
+                "PS Prob":  f"{r['ps_prob']:.3f}",
+                "CS Label": ("Sleeping" if r.get("cs_label") else "Healthy") if r.get("has_cs") else "n/a",
+                "PS Label": "Sleeping" if r["ps_label"] else "Healthy",
+                "Final":    "🔴 SLEEPING" if r["final"] else "🟢 Healthy",
             })
         st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
 
@@ -638,6 +650,8 @@ def _render_step5():
         st.session_state["report_csv"] = build_report_csv(classifications, sites)
 
     report_bytes = st.session_state["report_csv"]
+    # Reaching Step 5 with a generated report means the pipeline is complete.
+    st.session_state["pipeline_step"] = max(st.session_state.get("pipeline_step", 0), 5)
 
     col_summ, col_actions = st.columns([1.2, 1])
 
@@ -652,13 +666,24 @@ def _render_step5():
         if sleeping_ids:
             for cid in sleeping_ids:
                 r = classifications[cid]
+                down = []
+                if r.get("has_cs") and r.get("cs_label"):
+                    down.append("CS")
+                if r.get("ps_label"):
+                    down.append("PS")
+                down_txt = (" + ".join(down) + " down") if down else "traffic down"
+                probs = f'PS={r["ps_prob"]:.2f}'
+                if r.get("has_cs"):
+                    probs = f'CS={r.get("cs_prob", 0):.2f} ' + probs
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:0.6rem;'
-                    f'margin-bottom:0.4rem;">'
+                    f'margin-bottom:0.4rem;flex-wrap:wrap;">'
                     f'<span class="badge badge-sleeping">SLEEPING</span>'
                     f'<span style="font-family:var(--mono);font-size:0.82rem;">{cid}</span>'
-                    f'<span style="color:var(--muted);font-size:0.75rem;">'
-                    f'CS={r["cs_prob"]:.2f} PS={r["ps_prob"]:.2f}</span>'
+                    f'<span style="font-family:var(--mono);font-size:0.72rem;'
+                    f'color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,transparent);'
+                    f'padding:0.1rem 0.45rem;border-radius:5px;">{down_txt}</span>'
+                    f'<span style="color:var(--muted);font-size:0.72rem;">{probs}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
