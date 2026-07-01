@@ -34,10 +34,20 @@ def build_report_csv(
             continue
         row = {"cell_id": cid, "report_date": date.today().isoformat()}
         row.update({k: v for k, v in site_meta.get(cid, {}).items() if k != "cell_id"})
-        row["cs_probability"] = res["cs_prob"]
         row["ps_probability"] = res["ps_prob"]
-        row["cs_verdict"]     = "sleeping" if res["cs_label"] else "healthy"
         row["ps_verdict"]     = "sleeping" if res["ps_label"] else "healthy"
+        if res.get("has_cs"):
+            row["cs_probability"] = res.get("cs_prob")
+            row["cs_verdict"]     = "sleeping" if res.get("cs_label") else "healthy"
+        else:
+            row["cs_probability"] = "n/a"
+            row["cs_verdict"]     = "n/a"
+        down = []
+        if res.get("has_cs") and res.get("cs_label"):
+            down.append("CS")
+        if res.get("ps_label"):
+            down.append("PS")
+        row["streams_down"]   = "+".join(down) if down else ""
         row["final_verdict"]  = "SLEEPING"
         rows.append(row)
 
