@@ -55,40 +55,41 @@ def _apply_dark_style(fig, ax_left, ax_right, title: str, cell_id: str):
 def generate_plots(
     cell_id: str,
     df: pd.DataFrame,
-) -> Tuple[bytes, bytes]:
+) -> Dict[str, bytes]:
     """
-    Generate CS and PS diagnostic plots for a single cell.
+    Generate diagnostic plot(s) for a single cell.
 
-    Parameters
-    ----------
-    cell_id : identifier string for the cell
-    df      : DataFrame with columns [timestamp, availability, cs_traffic, ps_traffic]
+    Produces the Availability-vs-PS plot for every cell, plus the
+    Availability-vs-CS plot only when the cell carries circuit-switched
+    traffic (2G/3G). 4G/5G cells therefore yield a single plot.
 
     Returns
     -------
-    cs_png_bytes : PNG bytes for the availability vs CS-traffic plot
-    ps_png_bytes : PNG bytes for the availability vs PS-traffic plot
+    {"ps": bytes}                or  {"cs": bytes, "ps": bytes}
     """
     ts    = pd.to_datetime(df["timestamp"])
     avail = df["availability"]
-    cs    = df["cs_traffic"]
-    ps    = df["ps_traffic"]
 
-    cs_bytes = _make_plot(
-        ts, avail, cs,
-        right_label="CS Traffic Volume (Erlangs)",
-        right_color=_CS_C,
-        title="Cell Availability vs Circuit-Switched Traffic",
-        cell_id=cell_id,
-    )
-    ps_bytes = _make_plot(
-        ts, avail, ps,
+    out: Dict[str, bytes] = {}
+
+    has_cs = df.attrs.get("has_cs", "cs_traffic" in df.columns) and "cs_traffic" in df.columns
+    if has_cs:
+        out["cs"] = _make_plot(
+            ts, avail, df["cs_traffic"],
+            right_label="CS Traffic Volume (Erlangs)",
+            right_color=_CS_C,
+            title="Cell Availability vs Circuit-Switched Traffic",
+            cell_id=cell_id,
+        )
+
+    out["ps"] = _make_plot(
+        ts, avail, df["ps_traffic"],
         right_label="PS Traffic Volume (MB/h)",
         right_color=_PS_C,
         title="Cell Availability vs Packet-Switched Traffic",
         cell_id=cell_id,
     )
-    return cs_bytes, ps_bytes
+    return out
 
 
 def _make_plot(
@@ -155,9 +156,9 @@ def generate_all_plots(
         if progress_callback:
             progress_callback((i + 1) / total, f"Plotting {cid}…")
         try:
-            cs_bytes, ps_bytes = generate_plots(cid, df)
-            plots[cid] = {"cs": cs_bytes, "ps": ps_bytes}
-            log_lines.append(f"Plots generated: {cid}")
+            plots[cid] = generate_plots(cid, df)
+            kinds = "+".join(plots[cid].keys()).upper()
+            log_lines.append(f"Plots generated: {cid} ({kinds})")
         except Exception as e:
             log_lines.append(f"Plot error ({cid}): {e}")
 
