@@ -184,56 +184,88 @@ def _get_classifier() -> SleepingCellClassifier:
     return _classifier_singleton
 
 
+def _rule_verdict(df, col: str) -> Tuple[float, int]:
+    """Data-driven verdict used in mock mode (and as a sensible fallback).
+
+    Sleeping  := availability stays high while this traffic stream collapses
+                 (high availability, low/▼ traffic — the dissociation).
+    Healthy   := traffic broadly tracks availability (both up).
+    """
+    import numpy as np
+    avail = float(np.mean(df["availability"]))
+    traf  = df[col].astype(float).to_numpy()
+    n = len(traf)
+    k = max(1, n // 3)
+    base = float(np.mean(traf[:k]))           # early-window traffic
+    tail = float(np.mean(traf[-k:]))          # late-window traffic
+    if base > 1e-6:
+        ratio = tail / base
+    else:
+        ratio = 0.0 if float(np.mean(traf)) < 1e-6 else 1.0
+
+    sleeping = (avail >= 95.0) and (ratio < 0.30)
+    if avail >= 95.0:
+        prob = min(0.99, max(0.01, 1.0 - ratio))   # collapse → high prob
+    else:
+        prob = min(0.44, max(0.02, 0.25 * ratio))  # not "available" → not sleeping
+    return round(prob, 4), (1 if sleeping else 0)
+
+
 def classify_plots(
     plots: Dict[str, Dict[str, bytes]],
+    kpi_data: Dict[str, "object"] | None = None,
     progress_callback=None,
 ) -> Tuple[Dict[str, Dict], list]:
     """
-    Classify CS and PS plots for every cell.
+    Classify each cell's plot(s) and combine them with a logical-OR rule.
 
-    Decision logic (logical OR):
-        A cell is confirmed sleeping if EITHER the CS plot OR the PS plot
-        is classified positive.  This matches Section 3.10 of the project.
+    A cell is confirmed SLEEPING if ANY of its plots exhibits the sleeping
+    pattern. 4G/5G cells have only a PS plot (no circuit-switched traffic),
+    so their verdict rests on that single plot.
 
-    Returns
-    -------
-    classifications : {
-        cell_id: {
-            "cs_prob":  float,
-            "cs_label": int,
-            "ps_prob":  float,
-            "ps_label": int,
-            "final":    int,   # 1 = sleeping, 0 = healthy
-        }
-    }
-    log_lines : list of status strings
+    In mock mode the per-plot verdict is derived from the KPI data itself
+    (so the verdict always agrees with the plotted curves). With a trained
+    model (MODEL_MOCK=0) the ResNet is run on each plot image instead.
     """
     clf       = _get_classifier()
+    kpi_data  = kpi_data or {}
     results   = {}
     log_lines = []
-    total     = len(plots)
+    total     = len(plots) or 1
 
     for i, (cid, plot_pair) in enumerate(plots.items()):
         if progress_callback:
             progress_callback((i + 1) / total, f"Classifying {cid}…")
 
-        cs_prob, cs_label = clf.predict(plot_pair["cs"], cell_id=cid + "_cs")
-        ps_prob, ps_label = clf.predict(plot_pair["ps"], cell_id=cid + "_ps")
+        df = kpi_data.get(cid)
+        has_cs = "cs" in plot_pair
+        res = {"has_cs": has_cs}
+        labels = []
 
-        # OR decision rule
-        final = 1 if (cs_label == 1 or ps_label == 1) else 0
+        # PS plot (always present)
+        if clf.mock and df is not None:
+            ps_prob, ps_label = _rule_verdict(df, "ps_traffic")
+        else:
+            ps_prob, ps_label = clf.predict(plot_pair["ps"], cell_id=cid + "_ps")
+        res["ps_prob"], res["ps_label"] = ps_prob, ps_label
+        labels.append(ps_label)
 
-        results[cid] = {
-            "cs_prob":  cs_prob,
-            "cs_label": cs_label,
-            "ps_prob":  ps_prob,
-            "ps_label": ps_label,
-            "final":    final,
-        }
+        # CS plot (2G/3G only)
+        if has_cs:
+            if clf.mock and df is not None and "cs_traffic" in getattr(df, "columns", []):
+                cs_prob, cs_label = _rule_verdict(df, "cs_traffic")
+            else:
+                cs_prob, cs_label = clf.predict(plot_pair["cs"], cell_id=cid + "_cs")
+            res["cs_prob"], res["cs_label"] = cs_prob, cs_label
+            labels.append(cs_label)
 
-        verdict = "SLEEPING ⚠" if final == 1 else "healthy ✓"
-        log_lines.append(
-            f"{cid}: CS={cs_prob:.3f} PS={ps_prob:.3f} → {verdict}"
-        )
+        res["final"] = 1 if any(lbl == 1 for lbl in labels) else 0   # OR rule
+        results[cid] = res
+
+        parts = [f"PS={res['ps_prob']:.3f}"]
+        if has_cs:
+            parts.append(f"CS={res['cs_prob']:.3f}")
+        verdict = "SLEEPING ⚠" if res["final"] == 1 else "healthy ✓"
+        log_lines.append(f"{cid}: {' '.join(parts)} → {verdict}")
 
     return results, log_lines
