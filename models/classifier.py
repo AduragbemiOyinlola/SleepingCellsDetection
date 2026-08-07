@@ -203,7 +203,7 @@ def _rule_verdict(df, col: str) -> Tuple[float, int]:
     else:
         ratio = 0.0 if float(np.mean(traf)) < 1e-6 else 1.0
 
-    sleeping = (avail >= 95.0) and (ratio < 0.30)
+    sleeping = (avail >= 95.0) and (ratio < 0.10)
     if avail >= 95.0:
         prob = min(0.99, max(0.01, 1.0 - ratio))   # collapse → high prob
     else:
