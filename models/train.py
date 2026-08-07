@@ -26,9 +26,6 @@ Dataset structure expected
 
 This matches the torchvision.datasets.ImageFolder convention.
 
-Hand-drawn augmentation plots should be placed in the appropriate
-train/ subfolder alongside the programmatically generated ones.
-
 Class weights
 -------------
 Computed automatically from class frequencies in the training set
@@ -38,7 +35,9 @@ to handle the sleeping-cell class imbalance described in Chapter 3.
 import argparse
 import os
 import copy
+import random
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam
@@ -46,6 +45,23 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchvision import datasets, models, transforms
 from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, confusion_matrix
+
+
+# ─── Reproducibility ──────────────────────────────────────────────────────────
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def worker_init_fn(worker_id):
+    seed = torch.initial_seed() % (2**32)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
@@ -60,6 +76,7 @@ def parse_args():
     p.add_argument("--workers",  default=4,   type=int)
     p.add_argument("--output",   default="models/weights/sleeping_cell_model.pt")
     p.add_argument("--threshold",default=0.5, type=float, help="Decision threshold")
+    p.add_argument("--seed",     default=42,  type=int, help="Random seed for reproducibility")
     return p.parse_args()
 
 
@@ -106,6 +123,9 @@ def build_model(arch: str, device):
 # ─── Training loop ────────────────────────────────────────────────────────────
 
 def train(args):
+    set_seed(args.seed)
+    print(f"Seed: {args.seed}")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
@@ -114,10 +134,15 @@ def train(args):
     train_ds = datasets.ImageFolder(os.path.join(args.data_dir, "train"), train_tf)
     val_ds   = datasets.ImageFolder(os.path.join(args.data_dir, "val"),   val_tf)
 
+    gen = torch.Generator()
+    gen.manual_seed(args.seed)
+
     train_dl = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
-                          num_workers=args.workers, pin_memory=True)
+                          num_workers=args.workers, pin_memory=True,
+                          generator=gen, worker_init_fn=worker_init_fn)
     val_dl   = DataLoader(val_ds,   batch_size=args.batch, shuffle=False,
-                          num_workers=args.workers, pin_memory=True)
+                          num_workers=args.workers, pin_memory=True,
+                          worker_init_fn=worker_init_fn)
 
     # Class weights (inverse frequency)
     class_counts = torch.tensor(
