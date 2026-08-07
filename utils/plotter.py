@@ -7,6 +7,13 @@ Generates:
 
 These plots replicate the diagnostic visualisations that engineers currently
 produce manually in the NMS, and serve as inputs to the ResNet classifier.
+
+Styling matches the training dataset exactly (white background, solid green
+availability line, dashed blue traffic line, no title baked into the image)
+since the deployed classifier was trained on that visual format and a
+mismatch here means degenerate, out-of-distribution predictions. The cell ID
+is surfaced separately in the UI (dashboard's selectbox/labels), not inside
+the plot image.
 """
 
 import io
@@ -21,39 +28,20 @@ import pandas as pd
 from utils.config import PLOT_DPI, PLOT_W_IN, PLOT_H_IN
 
 
-# ── Shared style ───────────────────────────────────────────────────────────────
-_BG      = "#0b0f1a"
-_SURFACE = "#111827"
-_BORDER  = "#1f2d42"
-_TEXT    = "#e2e8f0"
-_MUTED   = "#64748b"
-_AVAIL_C = "#00d4ff"    # cyan  — availability
-_CS_C    = "#ff6b35"    # orange — CS traffic
-_PS_C    = "#00e5a0"    # green  — PS traffic
+# ── Shared style (matches the training dataset) ────────────────────────────────
+_AVAIL_C = "green"    # availability
+_CS_C    = "blue"     # CS traffic
+_PS_C    = "blue"     # PS traffic
 
 
-def _apply_dark_style(fig, ax_left, ax_right, title: str, cell_id: str):
-    """Apply dark-theme styling shared across both plot types."""
-    fig.patch.set_facecolor(_BG)
-    ax_left.set_facecolor(_SURFACE)
-
-    for spine in ax_left.spines.values():
-        spine.set_edgecolor(_BORDER)
-    for spine in ax_right.spines.values():
-        spine.set_edgecolor(_BORDER)
-
-    ax_left.tick_params(colors=_MUTED, labelsize=7)
-    ax_right.tick_params(colors=_MUTED, labelsize=7)
-    ax_left.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %Hh"))
+def _apply_style(ax_left, ax_right):
+    """Apply the light styling shared across both plot types."""
+    ax_left.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
     ax_left.xaxis.set_major_locator(mdates.DayLocator())
-    plt.setp(ax_left.xaxis.get_majorticklabels(), rotation=30, ha="right")
-
-    fig.suptitle(f"{title}\n{cell_id}", color=_TEXT, fontsize=9, fontweight="bold", y=0.99)
-    ax_left.grid(True, color=_BORDER, linewidth=0.5, linestyle="--", alpha=0.7)
+    ax_left.grid(True, linewidth=0.5, linestyle="--", alpha=0.7)
 
 
 def generate_plots(
-    cell_id: str,
     df: pd.DataFrame,
 ) -> Dict[str, bytes]:
     """
@@ -78,16 +66,12 @@ def generate_plots(
             ts, avail, df["cs_traffic"],
             right_label="CS Traffic Volume (Erlangs)",
             right_color=_CS_C,
-            title="Cell Availability vs Circuit-Switched Traffic",
-            cell_id=cell_id,
         )
 
     out["ps"] = _make_plot(
         ts, avail, df["ps_traffic"],
         right_label="PS Traffic Volume (MB/h)",
         right_color=_PS_C,
-        title="Cell Availability vs Packet-Switched Traffic",
-        cell_id=cell_id,
     )
     return out
 
@@ -96,41 +80,35 @@ def _make_plot(
     ts, avail, traffic,
     right_label: str,
     right_color: str,
-    title: str,
-    cell_id: str,
 ) -> bytes:
     fig, ax1 = plt.subplots(figsize=(PLOT_W_IN, PLOT_H_IN), dpi=PLOT_DPI)
     ax2 = ax1.twinx()
 
     # Plot availability
     ax1.plot(ts, avail, color=_AVAIL_C, linewidth=1.6, label="Availability (%)")
-    ax1.fill_between(ts, avail, alpha=0.08, color=_AVAIL_C)
-    ax1.set_ylabel("Availability (%)", color=_AVAIL_C, fontsize=8)
-    ax1.tick_params(axis="y", labelcolor=_AVAIL_C)
+    ax1.set_ylabel("Availability (%)", fontsize=8)
     ax1.set_ylim(0, 105)
 
-    # Plot traffic
+    # Plot traffic — floor at zero (traffic is physically non-negative, and this
+    # matches the training data's axis convention; matplotlib's plain autoscale
+    # centers symmetrically around near-constant series instead, which shifts
+    # a flat near-zero line to the middle of the frame rather than the bottom)
     ax2.plot(ts, traffic, color=right_color, linewidth=1.4,
              linestyle="--", label=right_label)
-    ax2.fill_between(ts, traffic, alpha=0.06, color=right_color)
-    ax2.set_ylabel(right_label, color=right_color, fontsize=8)
-    ax2.tick_params(axis="y", labelcolor=right_color)
+    ax2.set_ylabel(right_label, fontsize=8)
+    ax2.set_ylim(bottom=0)
 
-    _apply_dark_style(fig, ax1, ax2, title, cell_id)
+    _apply_style(ax1, ax2)
 
     # Combined legend
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(
-        lines1 + lines2, labels1 + labels2,
-        loc="upper left", fontsize=7,
-        facecolor=_SURFACE, edgecolor=_BORDER, labelcolor=_TEXT,
-    )
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=7)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.tight_layout(pad=0.3)
 
     buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=PLOT_DPI, facecolor=_BG)
+    plt.savefig(buf, format="png", dpi=PLOT_DPI, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -156,7 +134,7 @@ def generate_all_plots(
         if progress_callback:
             progress_callback((i + 1) / total, f"Plotting {cid}…")
         try:
-            plots[cid] = generate_plots(cid, df)
+            plots[cid] = generate_plots(df)
             kinds = "+".join(plots[cid].keys()).upper()
             log_lines.append(f"Plots generated: {cid} ({kinds})")
         except Exception as e:
