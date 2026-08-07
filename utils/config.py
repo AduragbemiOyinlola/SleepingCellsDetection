@@ -131,6 +131,8 @@ REPORT_SUBJECT      = "[SleepGuard] Confirmed Sleeping Cells — {date}"
 REPORT_SENDER_NAME  = "SleepGuard Bot"
 
 # ─── Plot ─────────────────────────────────────────────────────────────────────
-PLOT_DPI    = 120
-PLOT_W_IN   = 8
+# 890x350px output — matches the training dataset's pixel dimensions exactly,
+# since the classifier is sensitive to aspect-ratio distortion under resize.
+PLOT_DPI    = 100
+PLOT_W_IN   = 8.9
 PLOT_H_IN   = 3.5
