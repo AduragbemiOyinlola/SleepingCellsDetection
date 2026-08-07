@@ -262,6 +262,7 @@ def _gmail_connect(token: str) -> Tuple[bool, str]:
 
 def _gmail_fetch(token: str, keyword: str) -> Tuple[Optional[dict], str]:
     try:
+        keyword = keyword.lower()
         lst = _request("GET", f"{GMAIL_ROOT}/users/me/messages", token, "gmail",
                        params={"q": f'subject:"{keyword}" in:inbox', "maxResults": EMAIL_MAX_SCAN})
         if lst.status_code != 200:
