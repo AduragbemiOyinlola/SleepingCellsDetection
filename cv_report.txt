@@ -1,0 +1,22 @@
+5-fold grouped stratified cross-validation, seed=42
+
+
+Mean +/- std across 5 folds:
+  accuracy:            1.000 +/- 0.000
+  sleeping precision:  1.000 +/- 0.000
+  sleeping recall:     1.000 +/- 0.000
+  sleeping f1:         1.000 +/- 0.000
+
+Pooled out-of-fold report:
+              precision    recall  f1-score   support
+
+     healthy       1.00      1.00      1.00      1000
+    sleeping       1.00      1.00      1.00       152
+
+    accuracy                           1.00      1152
+   macro avg       1.00      1.00      1.00      1152
+weighted avg       1.00      1.00      1.00      1152
+
+Pooled confusion matrix (rows=true, cols=pred, order=[healthy, sleeping]):
+[[1000    0]
+ [   0  152]]
