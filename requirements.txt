@@ -1,1 +1,9 @@
+streamlit
 python-dotenv
+requests
+msal
+google-auth-oauthlib
+pandas
+numpy
+matplotlib
+pillow
